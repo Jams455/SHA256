@@ -3,3 +3,6 @@ main
 main.dSYM
 helloworld.dSYM
 .vscode
+test.cpp
+test
+RunCommand.txt
