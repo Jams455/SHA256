@@ -79,35 +79,6 @@ namespace SHA256
 		0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2
 	}};
 
-	std::array<uint32_t, 64> GenMsgSchedule(const std::string& input)
-	{
-		uint64_t inputSize = input.size();
-		
-		assert (inputSize <= 55);
-
-		std::array<uint32_t, 64> W {};
-
-		for (uint32_t charID = 0; charID < inputSize; ++charID)
-		{
-			uint32_t wordID = charID / 4;
-			uint32_t charShift = (3 - (charID % 4 )) * 8;
-
-			uint32_t currChar = static_cast<uint8_t>(input[charID]);
-
-			W[wordID] |= currChar << charShift;
-		}
-
-		uint32_t wordIDEnd = inputSize / 4;
-		uint32_t charShiftEnd = (3 - (inputSize % 4 )) * 8;
-		W[wordIDEnd] |= 0x80u << charShiftEnd;
-
-		uint64_t inputSizeInBits = inputSize * 8;
-		W[14] = inputSizeInBits >> 32;
-		W[15] = inputSizeInBits;
-
-		return W;
-	}
-
 	void OutputMsgSchedule(const std::array<uint32_t, 64>& W)
 	{
 		for (size_t messageInd = 0; messageInd < W.size(); ++messageInd)
@@ -121,6 +92,98 @@ namespace SHA256
 		for (size_t i = 16; i < 64; ++i)
 		{
 			W[i] = s1(W[i-2]) + W[i-7] + s0(W[i-15]) + W[i-16];
+		}
+	}
+
+	std::array<uint32_t, 64> GenMsgSchedule(const std::string& totalInput, uint64_t blockIndex, uint64_t blockCount)
+	{
+		if (blockIndex == blockCount - 1)
+		{
+			std::cout << "Block" << blockIndex << "Started\n";
+
+			uint64_t startInd = blockIndex * 64;
+			uint64_t endInd = totalInput.size();
+			
+			uint64_t inputSize = endInd - startInd;
+
+			std::cout << "\tStart ->" << startInd << "\n";
+			std::cout << "\tEnd ->" << endInd << '\n';
+			std::cout << "\tInpSize ->" << inputSize << '\n';
+			std::string input = totalInput.substr(startInd, inputSize);
+			std::cout << "\tInput ->" << input << '\n';
+			
+			std::array<uint32_t, 64> W {};
+			
+			for (uint32_t charID = 0; charID < inputSize; ++charID)
+			{
+				uint32_t wordID = charID / 4;
+				uint32_t charShift = (3 - (charID % 4 )) * 8;
+
+				uint32_t currChar = static_cast<uint8_t>(input[charID]);
+
+				W[wordID] |= currChar << charShift;
+			}
+
+			uint32_t wordIDEnd = inputSize / 4;
+			uint32_t charShiftEnd = (3 - (inputSize % 4 )) * 8;
+			W[wordIDEnd] |= 0x80u << charShiftEnd;
+
+			uint64_t totalInputSizeInBits = totalInput.size() * 8;
+			W[14] = totalInputSizeInBits >> 32;
+			W[15] = totalInputSizeInBits;
+			
+			PadMsgSchedule(W);
+			std::cout << "Block" << blockIndex << "Finished\n";
+
+			return W;
+		}
+		else
+		{
+			uint64_t startInd = blockIndex * 64;
+			uint64_t totalLength = totalInput.size();
+			uint64_t remainingLength = totalLength - startInd;
+			uint64_t inputSize{};
+			
+			if (remainingLength < 64)
+			{
+				inputSize = remainingLength;
+			}
+			else
+			{
+				inputSize = 64;
+			}
+
+
+			std::cout << "Block" << blockIndex << "Started (not last) \n";
+
+			std::string input = totalInput.substr(startInd, inputSize);
+			std::cout << "\tStart ->" << startInd << "\n";
+			std::cout << "\tInpSize ->" << inputSize << '\n';
+			std::cout << "\tInput ->" << input << '\n';
+
+			std::array<uint32_t, 64> W {};
+
+			for (uint32_t charID = 0; charID < inputSize; ++charID)
+			{
+				uint32_t wordID = charID / 4;
+				uint32_t charShift = (3 - (charID % 4 )) * 8;
+
+				uint32_t currChar = static_cast<uint8_t>(input[charID]);
+
+				W[wordID] |= currChar << charShift;
+			}
+			std::cout << "Block" << blockIndex << "Finished (not last) \n";
+
+			if (inputSize != 64)
+			{
+				uint32_t wordIDEnd = inputSize / 4;
+				uint32_t charShiftEnd = (3 - (inputSize % 4 )) * 8;
+				W[wordIDEnd] |= 0x80u << charShiftEnd;
+			}
+
+			PadMsgSchedule(W);
+
+			return W;
 		}
 	}
 
@@ -197,23 +260,21 @@ namespace SHA256
 		uint64_t totalByteCount = (rawInputByteCount + 1 + 8);
 		uint64_t paddedByteCount = ((totalByteCount + 63) / 64) * 64;
 		uint64_t blockCount = paddedByteCount / 64;
-
+		std::cout << "BlockCount ->" << blockCount << '\n';
 		////////////////////////
 		
 		std::array<uint32_t, 8> registers = H;
 
-		for (uint64_t blockInd = 0; blockInd < blockCount; ++blockInd)
-		{
-			std::array<uint32_t, 64> W = GenMsgSchedule(input);
-			
-			PadMsgSchedule(W);
-			
+		for (uint64_t blockID = 0; blockID < blockCount; ++blockID)
+		{	
+			std::cout << "BlockID ->" << blockID << '\n';
+			std::array<uint32_t, 64> W = GenMsgSchedule(input, blockID, blockCount);
+
 			registers = Compression(W, K, registers);
 		}
 
 		std::array<uint8_t, 32> hashBytes = ToBytes(registers);
 
-		std::cout << std::bitset<8>(hashBytes[0]) << '\n';
 		return hashBytes;
 	}
 
@@ -232,9 +293,11 @@ namespace SHA256
 
 int main()
 {
-	const std::string input = { "abc" };
-
+	const std::string input = { "abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyabcdefgfuinq12abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyabcdefgfuin" };
+	
 	std::array<uint8_t, 32> sha256Hash = SHA256::sha256(input);
 
 	SHA256::OutputHash(sha256Hash);
 }
+
+//abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyabcdefgfuinq12wunfioqwenfioqweunfqiwouenfqoiwuenfiqwuenfqiwoeufnqiwuenfqiweu34niqewuofn
